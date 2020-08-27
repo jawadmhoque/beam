@@ -134,6 +134,7 @@ class UrbanSimScenarioLoaderTest extends AsyncWordSpec with Matchers with Mockit
       householdId = householdId,
       rank = 123,
       age = 30,
+      "",
       isFemale = false,
       valueOfTime = 0.0,
       industry = None

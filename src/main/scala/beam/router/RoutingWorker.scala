@@ -67,6 +67,13 @@ class RoutingWorker(workerParams: R5Parameters) extends Actor with ActorLogging 
   )
   private implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(execSvc)
 
+  private val ghExecSvc: ExecutorService = Executors.newFixedThreadPool(
+    numOfThreads,
+    new ThreadFactoryBuilder().setDaemon(true).setNameFormat("gh-routing-worker-%d").build()
+  )
+  private val ghExecutionContext: ExecutionContext = ExecutionContext.fromExecutorService(execSvc)
+
+
   private val tickTask: Cancellable =
     context.system.scheduler.scheduleWithFixedDelay(2.seconds, 10.seconds, self, "tick")(context.dispatcher)
   private var msgs = 0
@@ -158,46 +165,50 @@ class RoutingWorker(workerParams: R5Parameters) extends Actor with ActorLogging 
     case request: RoutingRequest =>
       msgs = msgs + 1
       if (firstMsgTime.isEmpty) firstMsgTime = Some(ZonedDateTime.now(ZoneOffset.UTC))
-      val eventualResponse = Future {
-        latency("request-router-time", Metrics.RegularLevel) {
-          if (!request.withTransit && (carRouter == "staticGH" || carRouter == "quasiDynamicGH")) {
-            routeRequestCounter.incrementAndGet()
-            val start = System.currentTimeMillis()
+      val eventualResponse =
+        if (!request.withTransit && (carRouter == "staticGH" || carRouter == "quasiDynamicGH")) {
+          routeRequestCounter.incrementAndGet()
+          val start = System.currentTimeMillis()
 
-            //run graphHopper for only cars
-            val ghResponse = if (request.streetVehicles.exists(_.mode == CAR)) {
-              latency("gh-router-time", Metrics.RegularLevel) {
-                val idx =
-                  if (carRouter == "quasiDynamicGH")
-                    Math.floor(request.departureTime / workerParams.beamConfig.beam.agentsim.timeBinSize).toInt
-                  else 0
-                Some(
-                  graphHoppers(idx).calcRoute(
-                    request.copy(streetVehicles = request.streetVehicles.filter(_.mode == CAR))
-                  )
+          //run graphHopper for only cars
+          val ghResponseFuture = Future {
+            if (request.streetVehicles.exists(_.mode == CAR)) {
+              val idx =
+                if (carRouter == "quasiDynamicGH")
+                  Math.floor(request.departureTime / workerParams.beamConfig.beam.agentsim.timeBinSize).toInt
+                else 0
+              Some(
+                graphHoppers(idx).calcRoute(
+                  request.copy(streetVehicles = request.streetVehicles.filter(_.mode == CAR))
                 )
-              }
-            } else None
-
-            val response = if (!ghResponse.exists(_.itineraries.nonEmpty)) {
-              recallR5ForEmptyGHResponse.incrementAndGet()
-              r5.calcRoute(request)
-            } else if (request.streetVehicles.exists(_.mode != CAR)) {
-              val r5Response =
-                Some(r5.calcRoute(request.copy(streetVehicles = request.streetVehicles.filter(_.mode != CAR))))
-              ghResponse.get.copy(
-                ghResponse.map(_.itineraries).getOrElse(Seq.empty) ++
-                  r5Response.map(_.itineraries).getOrElse(Seq.empty)
               )
-            } else ghResponse.get
+            } else None
+          }(ghExecutionContext)
 
+          for {
+            ghResponse <- ghResponseFuture
+            resultResponse <- Future {
+              if (!ghResponse.exists(_.itineraries.nonEmpty)) {
+                recallR5ForEmptyGHResponse.incrementAndGet()
+                r5.calcRoute(request)
+              } else if (request.streetVehicles.exists(_.mode != CAR)) {
+                val r5Response =
+                  Some(r5.calcRoute(request.copy(streetVehicles = request.streetVehicles.filter(_.mode != CAR))))
+                ghResponse.get.copy(
+                  ghResponse.map(_.itineraries).getOrElse(Seq.empty) ++
+                    r5Response.map(_.itineraries).getOrElse(Seq.empty)
+                )
+              } else ghResponse.get
+            }
+          } yield {
             routeRequestExecutionTime.addAndGet(System.currentTimeMillis() - start)
-            response
-          } else {
+            resultResponse
+          }
+        } else {
+          Future {
             r5.calcRoute(request)
           }
         }
-      }
       eventualResponse.recover {
         case e =>
           log.error(e, "calcRoute failed")
@@ -311,7 +322,7 @@ class RoutingWorker(workerParams: R5Parameters) extends Actor with ActorLogging 
       }
     }
 
-    graphHoppers = Await.result(Future.sequence(futures), 10.minutes).toMap
+    graphHoppers = Await.result(Future.sequence(futures), 20.minutes).toMap
   }
 }
 

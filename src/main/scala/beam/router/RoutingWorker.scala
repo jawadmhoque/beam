@@ -71,7 +71,7 @@ class RoutingWorker(workerParams: R5Parameters) extends Actor with ActorLogging 
     numOfThreads,
     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("gh-routing-worker-%d").build()
   )
-  private val ghExecutionContext: ExecutionContext = ExecutionContext.fromExecutorService(execSvc)
+  private val ghExecutionContext: ExecutionContext = ExecutionContext.fromExecutorService(ghExecSvc)
 
 
   private val tickTask: Cancellable =

@@ -325,7 +325,7 @@ trait ChoosesMode {
             requestId = None
           }
           parkingRequestId = makeRequestWith(
-            withTransit = true,
+            withTransit = false,
             newlyAvailableBeamVehicles.map(_.streetVehicle) :+ bodyStreetVehicle,
             withParking = willRequestDrivingRoute
           )

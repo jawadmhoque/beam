@@ -18,6 +18,7 @@ import com.graphhopper.routing.util._
 import com.graphhopper.routing.weighting.{FastestWeighting, PriorityWeighting, TurnCostProvider}
 import com.graphhopper.storage._
 import com.graphhopper.util.{PMap, Parameters, PointList}
+import com.typesafe.scalalogging.LazyLogging
 import org.matsim.api.core.v01.{Coord, Id}
 
 import scala.collection.JavaConverters._
@@ -30,7 +31,7 @@ class GraphHopperWrapper(
   fuelTypePrices: FuelTypePrices,
   wayId2TravelTime: Map[Long, Double],
   id2Link: Map[Int, (Coord, Coord)]
-) extends Router {
+) extends Router with LazyLogging {
 
   private val graphHopper = {
     val profiles = GraphHopperWrapper.getProfiles(carRouter)
@@ -137,6 +138,9 @@ class GraphHopperWrapper(
             // FIXME It's temporary hack to check run
             if (linkTravelTimes.size > 1 && math.abs(math.round(linkTravelTimes.tail.sum).toInt -
               (SpaceTime(destination, routingRequest.departureTime + beamTotalTravelTime).time - SpaceTime(origin, routingRequest.departureTime).time)) > 2) {
+              None
+            } if (beamTotalTravelTime < 5) {
+              logger.info("!!!!!!!!!! Very low travel time: {}", beamTotalTravelTime)
               None
             } else {
               val beamLeg = BeamLeg(

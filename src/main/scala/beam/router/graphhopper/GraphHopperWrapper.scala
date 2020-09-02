@@ -139,7 +139,7 @@ class GraphHopperWrapper(
             if (linkTravelTimes.size > 1 && math.abs(math.round(linkTravelTimes.tail.sum).toInt -
               (SpaceTime(destination, routingRequest.departureTime + beamTotalTravelTime).time - SpaceTime(origin, routingRequest.departureTime).time)) > 2) {
               None
-            } if (beamTotalTravelTime < 5) {
+            } else if (beamTotalTravelTime < 5) {
               logger.info("!!!!!!!!!! Very low travel time: {}", beamTotalTravelTime)
               None
             } else {

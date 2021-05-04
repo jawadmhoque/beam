@@ -128,11 +128,12 @@ class JDEQSimRunner(
         ),
         physsimSpeedHandler.notifyIterationEnds(agentSimIterationNumber),
         (),
-      )(concurrent.ExecutionContext.global)
+      )(scala.concurrent.ExecutionContext.global)
     }
     SimulationResult(
       iteration = currentPhysSimIter,
       travelTime = travelTimeCalculator.getLinkTravelTimes,
+      volumesAnalyzer = Some(linkStatsGraph.getVolumes),
       eventTypeToNumberOfMessages = eventTypeCounter.getStats,
       carTravelTimeStats = carTravelTimeHandler.compute
     )

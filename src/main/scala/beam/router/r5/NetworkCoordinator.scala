@@ -152,6 +152,11 @@ trait NetworkCoordinator extends LazyLogging {
   }
 
   def convertFrequenciesToTrips(): Unit = {
+    // gde next thee models for debugging
+    logger.info(transportNetwork.toString())
+    logger.info(transportNetwork.transitLayer.toString())
+    logger.info(transportNetwork.transitLayer.tripPatterns.toString())
+
     transportNetwork.transitLayer.tripPatterns.asScala.foreach { tp =>
       if (tp.hasFrequencies) {
         val toAdd: Vector[TripSchedule] = tp.tripSchedules.asScala.toVector.flatMap { ts =>
